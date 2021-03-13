@@ -78,6 +78,6 @@ func main() {
 
 	handler := cors.Default().Handler(router)
 
-	fmt.Println("Listening on port 8080...")
+	fmt.Println("Listening on port" + os.Getenv("PORT") + "...")
 	log.Fatal(http.ListenAndServe(":"+os.Getenv("PORT"), handler))
 }
