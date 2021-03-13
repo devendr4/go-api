@@ -4,16 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
+	"github.com/rs/cors"
 	"log"
 	"net/http"
 	"net/smtp"
+	"os"
 )
 
 type email struct {
 	Name    string
 	Email   string
 	Subject string
-	Message string
+	Msg     string
 }
 
 func postEmail(w http.ResponseWriter, r *http.Request) {
@@ -22,23 +25,25 @@ func postEmail(w http.ResponseWriter, r *http.Request) {
 	err := decoder.Decode(&newEmail)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("500 - Internal Server Error"))
+		json.NewEncoder(w).Encode(map[string]string{"status": "error", "status-code": "500"})
+	} else {
+		mailErr := sendEmail(newEmail)
+		if mailErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{"status": "error", "status-code": "500"})
+		} else {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"status": "ok", "status-code": "200"})
+		}
 	}
-	mailErr := sendEmail(newEmail)
-	if mailErr != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(mailErr.Error()))
-	}
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Success"))
 }
 
 func sendEmail(emailData email) (err error) {
-	from := "gabrielmirabal18@gmail.com"
-	password := "putalocura15"
+	from := os.Getenv("FROM")
+	password := os.Getenv("PASSWORD")
 
 	to := []string{
-		"angel.emo.altuve@gmail.com",
+		os.Getenv("TO"),
 	}
 
 	smtpHost := "smtp.gmail.com"
@@ -49,7 +54,7 @@ func sendEmail(emailData email) (err error) {
 		"\r\n" +
 		"From: " + emailData.Email + "\r\n" +
 		"Name: " + emailData.Name + "\r\n" +
-		"Message: " + emailData.Message + "\r\n")
+		"Message: " + emailData.Msg + "\r\n")
 
 	auth := smtp.PlainAuth("", from, password, smtpHost)
 
@@ -63,9 +68,16 @@ func sendEmail(emailData email) (err error) {
 }
 
 func main() {
+	envErr := godotenv.Load(".env")
+	if envErr != nil {
+		log.Printf("Error loading .env")
+	}
+
 	router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/new-email", postEmail)
+	router.HandleFunc("/new-email", postEmail).Methods("POST", "OPTIONS")
+
+	handler := cors.Default().Handler(router)
 
 	fmt.Println("Listening on port 8080...")
-	log.Fatal(http.ListenAndServe(":8080", router))
+	log.Fatal(http.ListenAndServe(":8080", handler))
 }
